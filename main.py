@@ -31,6 +31,8 @@ FREQUENCY_IN_SECONDS = int(os.getenv('FREQUENCY_IN_SECONDS'))
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+logging.getLogger('twilio.http_client').setLevel(logging.WARNING)
+logging.getLogger('httpx2').setLevel(logging.WARNING)
 
 
 def fetch_website(url):
@@ -109,9 +111,16 @@ for url in URLS:
 
 
 def main():
-    counter = 0
     failing = False
     client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+
+    # one startup text per person, not one per url
+    for number in TO_PHONE_NUMBERS:
+        try:
+            send_sms(client, TWILIO_PHONE_NUMBER, number,
+                     f"Web change bot reset. Tracking {', '.join(URLS)} every {FREQUENCY_IN_SECONDS} seconds 💅🏻")
+        except Exception as e:
+            logger.error(f"Failed to send startup SMS: {e}")
 
     while True:
         try:
@@ -119,31 +128,29 @@ def main():
                 last_state = read_last_state(clean_url(url))
                 current_state = get_website_content(url)
 
-                if current_state != last_state:
+                if not last_state:
+                    # no baseline yet (fresh deploy), just record it
+                    logger.info(f"Recorded baseline for {url}")
+                    write_state(clean_url(url), current_state)
+                elif current_state != last_state:
                     percent_change = compare_strings(current_state, last_state)
                     percent_change = 100 - percent_change
-                    logger.info("Change detected on the website - {}% different".format(percent_change))
+                    logger.info(f"Change detected on {url} - {percent_change}% different")
                     diff = string_diff(current_state, last_state)
-                    print(f"Changes detected on website:\n {diff}")
+                    logger.debug(f"Changes detected on website:\n {diff}")
 
                     if percent_change > 2:
                         diff_summary = summarize_diff(diff)
 
                         for number in TO_PHONE_NUMBERS:
-                            if counter == 0:
-                                send_sms(client, TWILIO_PHONE_NUMBER, number,
-                                        f"Web change bot reset. Tracking {url} every {FREQUENCY_IN_SECONDS} seconds 💅🏻")
-                            else:
-                                send_sms(client, TWILIO_PHONE_NUMBER, number,
-                                        f"Change detected on {url} - {percent_change}% different. \n Summary: {diff_summary}")
+                            send_sms(client, TWILIO_PHONE_NUMBER, number,
+                                     f"Change detected on {url} - {percent_change}% different. \n Summary: {diff_summary}")
 
                     write_state(clean_url(url), current_state)
                 else:
                     logger.info(
                         f"No change detected for {url} at {datetime.now(pytz.timezone('UTC')).astimezone(pytz.timezone('US/Pacific')).strftime('%Y-%m-%d %H:%M:%S %Z%z')}")
-                    pass
 
-            counter += 1
             failing = False
             time.sleep(FREQUENCY_IN_SECONDS)  # Check every 60 seconds
 
