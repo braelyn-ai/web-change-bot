@@ -10,10 +10,10 @@ from datetime import datetime
 import pytz
 from dotenv import load_dotenv
 import difflib
-from openai import OpenAI
+import anthropic
 
 load_dotenv()
-openai = OpenAI()
+claude = anthropic.Anthropic()
 
 # Twilio credentials
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
@@ -79,19 +79,17 @@ def string_diff(str1, str2):
 
 def summarize_diff(diff):
     try:
-        messages = [{"role": "system", "content": "you are a text diff summarization tool. explain the important parts of the diff in a very short summary. only mention changes, not text that didn't change. this is a diff on an ecommerce website selling cute bodysuits."},
-                               {"role": "user", "content": diff}]
-        response = openai.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages,
-            temperature=0.5,
+        response = claude.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=300,
+            system="you are a text diff summarization tool. explain the important parts of the diff in a very short summary. only mention changes, not text that didn't change. this is a diff on an ecommerce website selling cute bodysuits.",
+            messages=[{"role": "user", "content": diff}],
         )
 
-        return response.choices[0].message.content
-    except Exception as e:
-        print('Failed to get diff: ', e)
+        return next((b.text for b in response.content if b.type == "text"), '')
+    except anthropic.APIError as e:
+        logger.error(f'Failed to summarize diff: {e}')
         return ''
-
 
 
 def clean_url(url: str):
