@@ -23,7 +23,7 @@ The bot will also generate short change summarizations using OpenAI for easier u
    Install the necessary Python libraries using pip:
 
    ```bash
-   poetry install
+   pip install -r requirements.txt
    ```
 
 2. **Twilio Account**

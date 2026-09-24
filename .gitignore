@@ -1,2 +1,6 @@
 .env
 website_state.txt
+*com.txt
+.venv/
+.idea/
+__pycache__/
